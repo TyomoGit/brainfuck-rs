@@ -1,5 +1,5 @@
-# brainfuck-interpreter-rs
+# bf-like-interpreter-rs
 
 ## Description
 
-BrainFuckのインタープリタ．
+BrainFuckっぽい言語のインタープリタ．
