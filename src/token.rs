@@ -37,19 +37,12 @@ impl From<char> for Token {
 
 pub fn tokenize(src: &str) -> Vec<Token> {
     let mut result = Vec::new();
-    let mut is_comment = false;
     for char in src.chars() {
-        if char == '\n' {
-            is_comment = false;
-        }
-        if char == '#' {
-            is_comment = true;
-        }
-        if is_comment {
-            continue;
-        }
+        let token = Token::from(char);
 
-        result.push(Token::from(char));
+        if token != Token::Illegal {
+            result.push(token);
+        }
     }
 
     result
