@@ -1,8 +1,6 @@
 #[derive(Debug, PartialEq)]
 pub enum Token {
     Illegal,
-    CommentStart,
-    NewLine,
 
     InclementPointer,
     DecrementPointer,
@@ -28,8 +26,6 @@ impl From<char> for Token {
             ',' => Token::Input,
             '[' => Token::LoopStart,
             ']' => Token::LoopEnd,
-            '\n' => Token::NewLine,
-            '#' => Token::CommentStart,
             _ => Token::Illegal,
         }
     }
@@ -39,11 +35,12 @@ pub fn tokenize(src: &str) -> Vec<Token> {
     let mut result = Vec::new();
     let mut is_comment = false;
     for char in src.chars() {
-        if char == '\n' {
-            is_comment = false;
-        }
         if char == '#' {
             is_comment = true;
+        }
+        if char == '\n' {
+            is_comment = false;
+            continue;
         }
         if is_comment {
             continue;
@@ -61,7 +58,7 @@ mod tests {
 
     #[test]
     fn test_tokenize() {
-        let src = "><+-.,[]あ\n#comment\n";
+        let src = "><+-.,[]あ\n#comment...<<>{]\n";
         let tokens = tokenize(src);
         assert_eq!(tokens, vec![
             Token::InclementPointer,
@@ -73,7 +70,6 @@ mod tests {
             Token::LoopStart,
             Token::LoopEnd,
             Token::Illegal,
-            Token::NewLine,
         ]);
     }
 }
