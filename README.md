@@ -1,4 +1,4 @@
-# brainfuck-interpreter
+# brainfuck-interpreter-rs
 
 ## Description
 
