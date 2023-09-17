@@ -42,11 +42,18 @@ pub fn tokenize(src: &str) -> Vec<Token> {
             is_comment = false;
             continue;
         }
-        if is_comment {
+        if is_comment || char.is_whitespace() {
             continue;
         }
 
-        result.push(Token::from(char));
+        let token = match Token::from(char) {
+            Token::Illegal => {
+                eprintln!("illegal character: {}", char);
+                std::process::exit(1);
+            },
+            token => token,
+        };
+        result.push(token);
     }
 
     result
@@ -58,7 +65,7 @@ mod tests {
 
     #[test]
     fn test_tokenize() {
-        let src = "><+-.,[]あ\n#comment...<<>{]\n";
+        let src = "><+-.,[]\n#comment...<<>{]\n";
         let tokens = tokenize(src);
         assert_eq!(tokens, vec![
             Token::InclementPointer,
@@ -69,7 +76,6 @@ mod tests {
             Token::Input,
             Token::LoopStart,
             Token::LoopEnd,
-            Token::Illegal,
         ]);
     }
 }
