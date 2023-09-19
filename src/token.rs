@@ -1,5 +1,5 @@
 #[derive(Debug, PartialEq)]
-pub enum Token {
+pub enum TokenKind {
     Illegal,
 
     InclementPointer,
@@ -15,23 +15,23 @@ pub enum Token {
     LoopEnd,
 }
 
-impl From<char> for Token {
+impl From<char> for TokenKind {
     fn from(c: char) -> Self {
         match c {
-            '>' => Token::InclementPointer,
-            '<' => Token::DecrementPointer,
-            '+' => Token::InclementValue,
-            '-' => Token::DecrementValue,
-            '.' => Token::Output,
-            ',' => Token::Input,
-            '[' => Token::LoopStart,
-            ']' => Token::LoopEnd,
-            _ => Token::Illegal,
+            '>' => TokenKind::InclementPointer,
+            '<' => TokenKind::DecrementPointer,
+            '+' => TokenKind::InclementValue,
+            '-' => TokenKind::DecrementValue,
+            '.' => TokenKind::Output,
+            ',' => TokenKind::Input,
+            '[' => TokenKind::LoopStart,
+            ']' => TokenKind::LoopEnd,
+            _ => TokenKind::Illegal,
         }
     }
 }
 
-pub fn tokenize(src: &str) -> Vec<Token> {
+pub fn tokenize(src: &str) -> Vec<TokenKind> {
     let mut result = Vec::new();
     let mut is_comment = false;
     for char in src.chars() {
@@ -46,8 +46,8 @@ pub fn tokenize(src: &str) -> Vec<Token> {
             continue;
         }
 
-        let token = match Token::from(char) {
-            Token::Illegal => {
+        let token = match TokenKind::from(char) {
+            TokenKind::Illegal => {
                 eprintln!("illegal character: {}", char);
                 std::process::exit(1);
             },
@@ -55,7 +55,6 @@ pub fn tokenize(src: &str) -> Vec<Token> {
         };
         result.push(token);
     }
-
     result
 }
 
@@ -68,14 +67,14 @@ mod tests {
         let src = "><+-.,[]\n#comment...<<>{]\n";
         let tokens = tokenize(src);
         assert_eq!(tokens, vec![
-            Token::InclementPointer,
-            Token::DecrementPointer,
-            Token::InclementValue,
-            Token::DecrementValue,
-            Token::Output,
-            Token::Input,
-            Token::LoopStart,
-            Token::LoopEnd,
+            TokenKind::InclementPointer,
+            TokenKind::DecrementPointer,
+            TokenKind::InclementValue,
+            TokenKind::DecrementValue,
+            TokenKind::Output,
+            TokenKind::Input,
+            TokenKind::LoopStart,
+            TokenKind::LoopEnd,
         ]);
     }
 }

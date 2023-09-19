@@ -1,16 +1,16 @@
 use std::io::{Read, Write};
 
-use crate::token::Token;
+use crate::token::TokenKind;
 
 pub struct Interpreter {
-    memory: Vec<u8>,
-    pointer: usize,
-    tokens: Vec<Token>,
-    token_pointer: usize,
+    pub memory: Vec<u8>,
+    pub pointer: usize,
+    pub tokens: Vec<TokenKind>,
+    pub token_pointer: usize,
 }
 
 impl Interpreter {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<TokenKind>) -> Self {
         Self {
             memory: vec![0; 30000],
             pointer: 0,
@@ -19,24 +19,32 @@ impl Interpreter {
         }
     }
 
+    pub fn step(
+        &mut self,
+        read: &mut impl Read,
+        write: &mut impl Write
+    ) {
+        match self.tokens[self.token_pointer] {
+            TokenKind::InclementPointer => self.inclement_pointer(),
+            TokenKind::DecrementPointer => self.decrement_pointer(),
+            TokenKind::InclementValue => self.inclement_value(),
+            TokenKind::DecrementValue => self.decrement_value(),
+            TokenKind::Output => self.output(write),
+            TokenKind::Input => self.input(read),
+            TokenKind::LoopStart => self.loop_start(),
+            TokenKind::LoopEnd => self.loop_end(),
+            _ => (),
+        }
+        self.token_pointer += 1;
+    }
+
     pub fn run(
         &mut self,
         read: &mut impl Read,
         write: &mut impl Write
     ) {
         while self.token_pointer < self.tokens.len() {
-            match self.tokens[self.token_pointer] {
-                Token::InclementPointer => self.inclement_pointer(),
-                Token::DecrementPointer => self.decrement_pointer(),
-                Token::InclementValue => self.inclement_value(),
-                Token::DecrementValue => self.decrement_value(),
-                Token::Output => self.output(write),
-                Token::Input => self.input(read),
-                Token::LoopStart => self.loop_start(),
-                Token::LoopEnd => self.loop_end(),
-                _ => (),
-            }
-            self.token_pointer += 1;
+            self.step(read, write);
         }
     }
 
@@ -70,8 +78,8 @@ impl Interpreter {
             while depth > 0 {
                 self.token_pointer += 1;
                 match self.tokens[self.token_pointer] {
-                    Token::LoopStart => depth += 1,
-                    Token::LoopEnd => depth -= 1,
+                    TokenKind::LoopStart => depth += 1,
+                    TokenKind::LoopEnd => depth -= 1,
                     _ => (),
                 }
             }
@@ -84,8 +92,8 @@ impl Interpreter {
             while depth > 0 {
                 self.token_pointer -= 1;
                 match self.tokens[self.token_pointer] {
-                    Token::LoopStart => depth -= 1,
-                    Token::LoopEnd => depth += 1,
+                    TokenKind::LoopStart => depth -= 1,
+                    TokenKind::LoopEnd => depth += 1,
                     _ => (),
                 }
             }
