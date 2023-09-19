@@ -1,4 +1,4 @@
-# bf-like-interpreter-rs
+# brainfuck-interpreter-rs
 
 ## Description
 
