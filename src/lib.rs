@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 
-mod token;
-mod interpreter;
+pub mod token;
+pub mod interpreter;
 
 pub fn run(string: &str, read: &mut impl Read, write: &mut impl Write) {
     let tokens = token::tokenize(string);
