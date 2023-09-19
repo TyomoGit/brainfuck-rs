@@ -81,29 +81,43 @@ impl Interpreter {
     }
 
     fn loop_start(&mut self) {
-        if self.memory[self.pointer] == 0 {
-            let mut depth = 1;
-            while depth > 0 {
-                self.token_pointer += 1;
-                match self.tokens[self.token_pointer] {
-                    TokenKind::LoopStart => depth += 1,
-                    TokenKind::LoopEnd => depth -= 1,
-                    _ => (),
-                }
+        if self.memory[self.pointer] != 0 {
+            return;
+        }
+
+        let mut depth = 1;
+        while depth > 0 {
+            self.token_pointer += 1;
+
+            if self.token_pointer >= self.tokens.len() {
+                break;
+            }
+
+            match self.tokens[self.token_pointer] {
+                TokenKind::LoopStart => depth += 1,
+                TokenKind::LoopEnd => depth -= 1,
+                _ => (),
             }
         }
     }
 
     fn loop_end(&mut self) {
-        if self.memory[self.pointer] != 0 {
-            let mut depth = 1;
-            while depth > 0 {
-                self.token_pointer -= 1;
-                match self.tokens[self.token_pointer] {
-                    TokenKind::LoopStart => depth -= 1,
-                    TokenKind::LoopEnd => depth += 1,
-                    _ => (),
-                }
+        if self.memory[self.pointer] == 0 {
+            return;
+        }
+
+        let mut depth = 1;
+        while depth > 0 {
+            self.token_pointer -= 1;
+
+            if self.token_pointer >= self.tokens.len() {
+                break;
+            }
+
+            match self.tokens[self.token_pointer] {
+                TokenKind::LoopStart => depth -= 1,
+                TokenKind::LoopEnd => depth += 1,
+                _ => (),
             }
         }
     }
