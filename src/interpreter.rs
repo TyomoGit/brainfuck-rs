@@ -49,11 +49,19 @@ impl Interpreter {
     }
 
     fn inclement_pointer(&mut self) {
-        self.pointer += 1;
+        if self.pointer == self.memory.len() - 1 {
+            self.pointer = 0;
+        } else {
+            self.pointer += 1;
+        }
     }
 
     fn decrement_pointer(&mut self) {
-        self.pointer -= 1;
+        if self.pointer == 0 {
+            self.pointer = self.memory.len() - 1;
+        } else {
+            self.pointer -= 1;
+        }
     }
 
     fn inclement_value(&mut self) {
@@ -100,5 +108,150 @@ impl Interpreter {
         }
     }
 
+
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone)]
+    struct MyReader {
+        pub input: Vec<u8>,
+    }
+
+    #[derive(Clone)]
+    struct MyWriter {
+        pub output: Vec<u8>,
+    }
+
+    impl Read for MyReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.input.as_slice().read(buf)
+        }
+    }
+
+    impl MyReader {
+        pub fn empty() -> Self {
+            Self { input: vec![] }
+        }
+    }
+
+    impl Write for MyWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.output.write(buf)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.output.flush()
+        }
+    }
+
+    impl MyWriter {
+        pub fn empty() -> Self {
+            Self { output: vec![] }
+        }
+    }
+
+    #[test]
+    pub fn inclement_pointer() {
+        let mut interpreter = Interpreter::new(vec![TokenKind::InclementPointer]);
+        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty());
+        assert_eq!(interpreter.pointer, 1);
+    }
+
+    #[test]
+    pub fn decrement_pointer() {
+        let mut interpreter = Interpreter::new(vec![TokenKind::DecrementPointer]);
+        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty());
+        assert_eq!(interpreter.pointer, 29999);
+    }
+
+    #[test]
+    pub fn inclement_value() {
+        let mut interpreter = Interpreter::new(vec![TokenKind::InclementValue]);
+        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty());
+        assert_eq!(interpreter.memory[0], 1);
+    }
+
+    #[test]
+    pub fn decrement_value() {
+        let mut interpreter = Interpreter::new(vec![TokenKind::DecrementValue]);
+        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty());
+        assert_eq!(interpreter.memory[0], 255);
+    }
+
+    #[test]
+    pub fn output() {
+        let mut writer = MyWriter::empty();
+        let mut interpreter = Interpreter::new(vec![TokenKind::Output]);
+        interpreter.memory[0] = 65;
+        interpreter.step(&mut MyReader::empty(), &mut writer);
+        assert_eq!(writer.output, vec![65]);
+    }
+
+    #[test]
+    pub fn input() {
+        let mut reader = MyReader { input: vec![65] };
+        let mut interpreter = Interpreter::new(vec![TokenKind::Input]);
+        interpreter.step(&mut reader, &mut MyWriter::empty());
+        assert_eq!(interpreter.memory[0], 65);
+    }
+
+    #[test]
+    pub fn loop_basic() {
+        let mut interpreter = Interpreter::new(vec![
+            TokenKind::InclementValue,
+            TokenKind::InclementValue,
+            TokenKind::LoopStart,
+            TokenKind::InclementPointer,
+            TokenKind::DecrementValue,
+            TokenKind::DecrementPointer,
+            TokenKind::DecrementValue, 
+            TokenKind::LoopEnd,
+        ]);
+        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty());
+        assert_eq!(interpreter.memory[0], 0);
+        assert_eq!(interpreter.memory[1], 254);
+        assert_eq!(interpreter.pointer, 0);
+    }
+
+    #[test]
+    pub fn loop_deep_zero() {
+        let mut interpreter = Interpreter::new(vec![
+            TokenKind::LoopStart,
+            TokenKind::LoopStart,
+            TokenKind::LoopStart,
+            TokenKind::LoopStart,
+            TokenKind::LoopStart,
+            TokenKind::LoopEnd,
+            TokenKind::LoopEnd,
+            TokenKind::LoopEnd,
+            TokenKind::LoopEnd,
+            TokenKind::LoopEnd,
+        ]);
+        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty());
+        assert_eq!(interpreter.memory[0], 0);
+    }
+
+    #[test]
+    pub fn loop_error() {
+        let mut interpreter = Interpreter::new(vec![
+            TokenKind::LoopEnd,
+        ]);
+        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty());
+        assert_eq!(interpreter.memory[0], 0);
+    }
+
+    #[test]
+    pub fn loop_error_nested() {
+        let mut interpreter = Interpreter::new(vec![
+            TokenKind::LoopStart,
+            TokenKind::LoopEnd,
+            TokenKind::LoopEnd,
+        ]);
+        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty());
+        assert_eq!(interpreter.memory[0], 0);
+    }
 
 }
