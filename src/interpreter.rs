@@ -24,6 +24,10 @@ impl Interpreter {
         read: &mut impl Read,
         write: &mut impl Write
     ) {
+        if self.token_pointer >= self.tokens.len() {
+            return;
+        }
+        
         match self.tokens[self.token_pointer] {
             TokenKind::InclementPointer => self.inclement_pointer(),
             TokenKind::DecrementPointer => self.decrement_pointer(),
