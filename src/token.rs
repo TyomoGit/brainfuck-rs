@@ -83,4 +83,15 @@ mod tests {
             TokenKind::LoopEnd,
         ]);
     }
+    #[test]
+    fn crlf() {
+        let src = "+++.#.\r\n";
+        let tokens = tokenize(src);
+        assert_eq!(tokens, vec![
+            TokenKind::InclementValue,
+            TokenKind::InclementValue,
+            TokenKind::InclementValue,
+            TokenKind::Output,
+        ]);
+    }
 }
