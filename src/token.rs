@@ -65,8 +65,7 @@ pub fn tokenize(src: &str) -> Result<Vec<TokenKind>, IllegalCharacterError> {
 
         let token = match TokenKind::from(char) {
             TokenKind::Illegal => {
-                eprintln!("illegal character: {}", char);
-                std::process::exit(1);
+                return Err(IllegalCharacterError(char));
             },
             token => token,
         };
