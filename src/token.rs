@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, PartialEq)]
 pub enum TokenKind {
     Illegal,
@@ -31,7 +33,16 @@ impl From<char> for TokenKind {
     }
 }
 
-pub fn tokenize(src: &str) -> Vec<TokenKind> {
+#[derive(Debug)]
+pub struct IllegalCharacterError(char);
+
+impl Display for IllegalCharacterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} is illegal character", self.0)
+    }
+}
+
+pub fn tokenize(src: &str) -> Result<Vec<TokenKind>, IllegalCharacterError> {
     let mut result = Vec::new();
     let mut is_comment = false;
     for char in src.chars() {
@@ -61,7 +72,7 @@ pub fn tokenize(src: &str) -> Vec<TokenKind> {
         };
         result.push(token);
     }
-    result
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -71,7 +82,7 @@ mod tests {
     #[test]
     fn test_tokenize() {
         let src = "><+-.,[]\n#comment...<<>{]\n";
-        let tokens = tokenize(src);
+        let tokens = tokenize(src).unwrap();
         assert_eq!(tokens, vec![
             TokenKind::InclementPointer,
             TokenKind::DecrementPointer,
@@ -86,7 +97,7 @@ mod tests {
     #[test]
     fn crlf() {
         let src = "+++.#.\r\n";
-        let tokens = tokenize(src);
+        let tokens = tokenize(src).unwrap();
         assert_eq!(tokens, vec![
             TokenKind::InclementValue,
             TokenKind::InclementValue,

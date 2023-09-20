@@ -11,7 +11,10 @@ fn main() {
     let mut src = String::new();
     file.read_to_string(&mut src).expect("failed to read file");
 
-    let tokens = token::tokenize(&src);
+    let tokens = token::tokenize(&src).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    });
     let mut interpreter = interpreter::Interpreter::new(tokens);
     interpreter.run(&mut std::io::stdin(), &mut std::io::stdout());
 }

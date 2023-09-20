@@ -4,7 +4,10 @@ pub mod token;
 pub mod interpreter;
 
 pub fn run(string: &str, read: &mut impl Read, write: &mut impl Write) {
-    let tokens = token::tokenize(string);
+    let tokens = token::tokenize(string).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    });
     let mut interpreter = interpreter::Interpreter::new(tokens);
     interpreter.run(read, write);
 }
@@ -54,7 +57,7 @@ mod tests {
     #[test]
     fn incomplete_loop() {
         let program = "[+.";
-        let tokens = token::tokenize(program);
+        let tokens = token::tokenize(program).unwrap();
         let mut reader = MyReader::empty();
         let mut writer = MyWriter::empty();
         let mut interpreter = interpreter::Interpreter::new(tokens);
