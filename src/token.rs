@@ -35,14 +35,20 @@ pub fn tokenize(src: &str) -> Vec<TokenKind> {
     let mut result = Vec::new();
     let mut is_comment = false;
     for char in src.chars() {
-        if char == '#' {
-            is_comment = true;
+        if cfg!(feature="comment") {
+            if char == '#' {
+                is_comment = true;
+            }
+            if char == '\n' {
+                is_comment = false;
+                continue;
+            }
+            if is_comment {
+                continue;
+            }
         }
-        if char == '\n' {
-            is_comment = false;
-            continue;
-        }
-        if is_comment || char.is_whitespace() {
+
+        if char.is_whitespace() {
             continue;
         }
 

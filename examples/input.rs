@@ -1,4 +1,4 @@
-use bf_rs::run;
+use brainfuck_interpreter::run;
 
 use std::io::{stdin, stdout};
 
