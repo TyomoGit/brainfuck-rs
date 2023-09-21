@@ -19,15 +19,19 @@ impl Interpreter {
         }
     }
 
+    pub fn check_token_pointer(&self) -> bool {
+        self.token_pointer < self.tokens.len()
+    }
+
     pub fn step(
         &mut self,
         read: &mut impl Read,
         write: &mut impl Write
     ) {
-        if self.token_pointer >= self.tokens.len() {
+        if !self.check_token_pointer() {
             return;
         }
-        
+
         match self.tokens[self.token_pointer] {
             TokenKind::InclementPointer => self.inclement_pointer(),
             TokenKind::DecrementPointer => self.decrement_pointer(),
@@ -47,7 +51,7 @@ impl Interpreter {
         read: &mut impl Read,
         write: &mut impl Write
     ) {
-        while self.token_pointer < self.tokens.len() {
+        while self.check_token_pointer() {
             self.step(read, write);
         }
     }
@@ -93,7 +97,7 @@ impl Interpreter {
         while depth > 0 {
             self.token_pointer += 1;
 
-            if self.token_pointer >= self.tokens.len() {
+            if !self.check_token_pointer() {
                 break;
             }
 
