@@ -1,16 +1,17 @@
 use std::io::{Read, Write};
 
-use crate::token::TokenKind;
+use crate::token::{TokenKind, Token, IncompleteLoopError};
 
 pub struct Interpreter {
     pub memory: Vec<u8>,
     pub pointer: usize,
-    pub tokens: Vec<TokenKind>,
+
+    pub tokens: Vec<Token>,
     pub token_pointer: usize,
 }
 
 impl Interpreter {
-    pub fn new(tokens: Vec<TokenKind>) -> Self {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             memory: vec![0; 30000],
             pointer: 0,
@@ -20,40 +21,44 @@ impl Interpreter {
     }
 
     pub fn check_token_pointer(&self) -> bool {
-        self.token_pointer < self.tokens.len()
+        self.token_pointer < self.tokens.len() && self.tokens[self.token_pointer].kind != TokenKind::End
     }
 
     pub fn step(
         &mut self,
         read: &mut impl Read,
         write: &mut impl Write
-    ) {
+    ) -> Result<(), IncompleteLoopError> {
         if !self.check_token_pointer() {
-            return;
+            return Ok(());
         }
 
-        match self.tokens[self.token_pointer] {
+        match self.tokens[self.token_pointer].kind {
             TokenKind::InclementPointer => self.inclement_pointer(),
             TokenKind::DecrementPointer => self.decrement_pointer(),
             TokenKind::InclementValue => self.inclement_value(),
             TokenKind::DecrementValue => self.decrement_value(),
             TokenKind::Output => self.output(write),
             TokenKind::Input => self.input(read),
-            TokenKind::LoopStart => self.loop_start(),
-            TokenKind::LoopEnd => self.loop_end(),
-            _ => (),
+            TokenKind::LoopStart => self.loop_start()?,
+            TokenKind::LoopEnd => self.loop_end()?,
+            TokenKind::End => return  Ok(()),
         }
         self.token_pointer += 1;
+
+        Ok(())
     }
 
     pub fn run(
         &mut self,
         read: &mut impl Read,
         write: &mut impl Write
-    ) {
+    ) -> Result<(), IncompleteLoopError> {
         while self.check_token_pointer() {
-            self.step(read, write);
+            self.step(read, write)?;
         }
+
+        Ok(())
     }
 
     fn inclement_pointer(&mut self) {
@@ -88,46 +93,30 @@ impl Interpreter {
         read.read_exact(&mut self.memory[self.pointer..self.pointer + 1]).unwrap();
     }
 
-    fn loop_start(&mut self) {
+    fn loop_start(&mut self) -> Result<(), IncompleteLoopError> {
         if self.memory[self.pointer] != 0 {
-            return;
+            return Ok(());
         }
 
-        let mut depth = 1;
-        while depth > 0 {
-            self.token_pointer += 1;
+        self.token_pointer = match self.tokens[self.token_pointer].jump {
+            Some(jump) => jump,
+            None =>return Err(IncompleteLoopError),
+        };
 
-            if !self.check_token_pointer() {
-                break;
-            }
-
-            match self.tokens[self.token_pointer] {
-                TokenKind::LoopStart => depth += 1,
-                TokenKind::LoopEnd => depth -= 1,
-                _ => (),
-            }
-        }
+        Ok(())
     }
 
-    fn loop_end(&mut self) {
+    fn loop_end(&mut self) -> Result<(), IncompleteLoopError>{
         if self.memory[self.pointer] == 0 {
-            return;
+            return Ok(());
         }
 
-        let mut depth = 1;
-        while depth > 0 {
-            self.token_pointer -= 1;
+        self.token_pointer = match self.tokens[self.token_pointer].jump {
+            Some(jump) => jump,
+            None => return Err(IncompleteLoopError),
+        };
 
-            if self.token_pointer >= self.tokens.len() {
-                break;
-            }
-
-            match self.tokens[self.token_pointer] {
-                TokenKind::LoopStart => depth -= 1,
-                TokenKind::LoopEnd => depth += 1,
-                _ => (),
-            }
-        }
+        Ok(())
     }
 
 
@@ -135,6 +124,8 @@ impl Interpreter {
 
 #[cfg(test)]
 mod tests {
+    use crate::token::*;
+
     use super::*;
 
     #[derive(Clone)]
@@ -177,103 +168,82 @@ mod tests {
 
     #[test]
     pub fn inclement_pointer() {
-        let mut interpreter = Interpreter::new(vec![TokenKind::InclementPointer]);
-        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty());
+        let mut interpreter = Interpreter::new(vec![Token::from(TokenKind::InclementPointer)]);
+        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty()).unwrap();
         assert_eq!(interpreter.pointer, 1);
     }
 
     #[test]
     pub fn decrement_pointer() {
-        let mut interpreter = Interpreter::new(vec![TokenKind::DecrementPointer]);
-        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty());
+        let mut interpreter = Interpreter::new(vec![Token::from(TokenKind::DecrementPointer)]);
+        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty()).unwrap();
         assert_eq!(interpreter.pointer, 29999);
     }
 
     #[test]
     pub fn inclement_value() {
-        let mut interpreter = Interpreter::new(vec![TokenKind::InclementValue]);
-        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty());
+        let mut interpreter = Interpreter::new(vec![Token::from(TokenKind::InclementValue)]);
+        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty()).unwrap();
         assert_eq!(interpreter.memory[0], 1);
     }
 
     #[test]
     pub fn decrement_value() {
-        let mut interpreter = Interpreter::new(vec![TokenKind::DecrementValue]);
-        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty());
+        let mut interpreter = Interpreter::new(vec![Token::from(TokenKind::DecrementValue)]);
+        interpreter.step(&mut MyReader::empty(), &mut MyWriter::empty()).unwrap();
         assert_eq!(interpreter.memory[0], 255);
     }
 
     #[test]
     pub fn output() {
         let mut writer = MyWriter::empty();
-        let mut interpreter = Interpreter::new(vec![TokenKind::Output]);
+        let mut interpreter = Interpreter::new(vec![Token::from(TokenKind::Output)]);
         interpreter.memory[0] = 65;
-        interpreter.step(&mut MyReader::empty(), &mut writer);
+        interpreter.step(&mut MyReader::empty(), &mut writer).unwrap();
         assert_eq!(writer.output, vec![65]);
     }
 
     #[test]
     pub fn input() {
         let mut reader = MyReader { input: vec![65] };
-        let mut interpreter = Interpreter::new(vec![TokenKind::Input]);
-        interpreter.step(&mut reader, &mut MyWriter::empty());
+        let mut interpreter = Interpreter::new(vec![Token::from(TokenKind::Input)]);
+        interpreter.step(&mut reader, &mut MyWriter::empty()).unwrap();
         assert_eq!(interpreter.memory[0], 65);
     }
 
     #[test]
     pub fn loop_basic() {
-        let mut interpreter = Interpreter::new(vec![
-            TokenKind::InclementValue,
-            TokenKind::InclementValue,
-            TokenKind::LoopStart,
-            TokenKind::InclementPointer,
-            TokenKind::DecrementValue,
-            TokenKind::DecrementPointer,
-            TokenKind::DecrementValue, 
-            TokenKind::LoopEnd,
-        ]);
-        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty());
+        // ++[>-<-]
+        let mut interpreter = Interpreter::new(tokenize("++[>-<-]").unwrap());
+        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty()).unwrap();
         assert_eq!(interpreter.memory[0], 0);
         assert_eq!(interpreter.memory[1], 254);
         assert_eq!(interpreter.pointer, 0);
     }
 
     #[test]
+    // [[[[[]]]]]
     pub fn loop_deep_zero() {
-        let mut interpreter = Interpreter::new(vec![
-            TokenKind::LoopStart,
-            TokenKind::LoopStart,
-            TokenKind::LoopStart,
-            TokenKind::LoopStart,
-            TokenKind::LoopStart,
-            TokenKind::LoopEnd,
-            TokenKind::LoopEnd,
-            TokenKind::LoopEnd,
-            TokenKind::LoopEnd,
-            TokenKind::LoopEnd,
-        ]);
-        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty());
+        let mut interpreter = Interpreter::new(tokenize("[[[[[]]]]]").unwrap());
+        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty()).unwrap();
         assert_eq!(interpreter.memory[0], 0);
     }
 
     #[test]
-    pub fn loop_error() {
-        let mut interpreter = Interpreter::new(vec![
-            TokenKind::LoopEnd,
-        ]);
-        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty());
-        assert_eq!(interpreter.memory[0], 0);
+    pub fn loop_error_1() {
+        let tokens = tokenize("[[]").unwrap();
+        let mut interpreter = Interpreter::new(tokens);
+        assert!(
+            interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty()).is_err()
+        )
     }
 
     #[test]
-    pub fn loop_error_nested() {
-        let mut interpreter = Interpreter::new(vec![
-            TokenKind::LoopStart,
-            TokenKind::LoopEnd,
-            TokenKind::LoopEnd,
-        ]);
-        interpreter.run(&mut MyReader::empty(), &mut MyWriter::empty());
-        assert_eq!(interpreter.memory[0], 0);
+    // []]
+    pub fn loop_error_2() {
+        assert!(
+            tokenize("[]]").is_err()
+        )
     }
 
 }

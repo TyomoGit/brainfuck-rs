@@ -9,7 +9,10 @@ pub fn run(string: &str, read: &mut impl Read, write: &mut impl Write) {
         std::process::exit(1);
     });
     let mut interpreter = interpreter::Interpreter::new(tokens);
-    interpreter.run(read, write);
+    interpreter.run(read, write).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    });
 }
 
 #[cfg(test)]
@@ -61,7 +64,8 @@ mod tests {
         let mut reader = MyReader::empty();
         let mut writer = MyWriter::empty();
         let mut interpreter = interpreter::Interpreter::new(tokens);
-        interpreter.run(&mut reader, &mut writer);
-        assert_eq!(writer.output[0], 0);
+        assert!(
+            interpreter.run(&mut reader, &mut writer).is_err()
+        )
     }
 }

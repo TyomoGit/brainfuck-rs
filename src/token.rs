@@ -1,8 +1,10 @@
-use std::fmt::Display;
+use std::{fmt::Display, error::Error};
 
-#[derive(Debug, PartialEq)]
+type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
-    Illegal,
+    End,
 
     InclementPointer,
     DecrementPointer,
@@ -17,33 +19,75 @@ pub enum TokenKind {
     LoopEnd,
 }
 
-impl From<char> for TokenKind {
-    fn from(c: char) -> Self {
-        match c {
-            '>' => TokenKind::InclementPointer,
-            '<' => TokenKind::DecrementPointer,
-            '+' => TokenKind::InclementValue,
-            '-' => TokenKind::DecrementValue,
-            '.' => TokenKind::Output,
-            ',' => TokenKind::Input,
-            '[' => TokenKind::LoopStart,
-            ']' => TokenKind::LoopEnd,
-            _ => TokenKind::Illegal,
+#[derive(Debug, PartialEq)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub jump: Option<usize>,
+}
+
+impl From<TokenKind> for Token {
+    fn from(kind: TokenKind) -> Self {
+        Token {
+            kind,
+            jump: None,
         }
     }
 }
 
-#[derive(Debug)]
-pub struct IllegalCharacterError(char);
 
+fn parse(c: char, tokens: &mut Vec<Token>, jump_stack: &mut Vec<usize>) -> Result<()> {
+    match c {
+        '>' => tokens.push(Token::from(TokenKind::InclementPointer)),
+        '<' => tokens.push(Token::from(TokenKind::DecrementPointer)),
+        '+' => tokens.push(Token::from(TokenKind::InclementValue)),
+        '-' => tokens.push(Token::from(TokenKind::DecrementValue)),
+        '.' => tokens.push(Token::from(TokenKind::Output)),
+        ',' => tokens.push(Token::from(TokenKind::Input)),
+        '[' => {
+            jump_stack.push(tokens.len());
+            tokens.push(Token::from(TokenKind::LoopStart));
+        }
+        ']' => {
+            let start = jump_stack.pop().ok_or(IncompleteLoopError)?;
+            tokens[start].jump = Some(tokens.len());
+            let token = Token {
+                kind: TokenKind::LoopEnd,
+                jump: Some(start-1),
+            };
+            tokens.push(token);
+        }
+        _ => {
+            return Err(Box::new(IllegalCharacterError(c)));
+        },
+    };
+
+    Ok(())
+}
+
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct IllegalCharacterError(char);
+#[derive(Debug, PartialEq, Eq)]
+pub struct IncompleteLoopError;
+
+impl Error for IllegalCharacterError {}
 impl Display for IllegalCharacterError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} is illegal character", self.0)
     }
 }
 
-pub fn tokenize(src: &str) -> Result<Vec<TokenKind>, IllegalCharacterError> {
-    let mut result = Vec::new();
+impl Error for IncompleteLoopError {}
+impl Display for IncompleteLoopError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "incomplete loop")
+    }
+}
+
+pub fn tokenize(src: &str) -> Result<Vec<Token>> {
+    let mut tokens = Vec::new();
+    let mut jump_stack = Vec::<usize>::new();
+
     let mut is_comment = false;
     for char in src.chars() {
         if cfg!(feature="comment") {
@@ -63,15 +107,12 @@ pub fn tokenize(src: &str) -> Result<Vec<TokenKind>, IllegalCharacterError> {
             continue;
         }
 
-        let token = match TokenKind::from(char) {
-            TokenKind::Illegal => {
-                return Err(IllegalCharacterError(char));
-            },
-            token => token,
-        };
-        result.push(token);
+        parse(char, &mut tokens, &mut jump_stack)?;
     }
-    Ok(result)
+
+    tokens.push(Token::from(TokenKind::End));
+
+    Ok(tokens)
 }
 
 #[cfg(test)]
@@ -81,7 +122,9 @@ mod tests {
     #[test]
     fn test_tokenize() {
         let src = "><+-.,[]\n#comment...<<>{]\n";
-        let tokens = tokenize(src).unwrap();
+        let tokens = tokenize(src).unwrap().iter().map(|e| {
+            e.kind.clone()
+        }).collect::<Vec<TokenKind>>();
         assert_eq!(tokens, vec![
             TokenKind::InclementPointer,
             TokenKind::DecrementPointer,
@@ -91,17 +134,21 @@ mod tests {
             TokenKind::Input,
             TokenKind::LoopStart,
             TokenKind::LoopEnd,
+            TokenKind::End,
         ]);
     }
     #[test]
     fn crlf() {
         let src = "+++.#.\r\n";
-        let tokens = tokenize(src).unwrap();
+        let tokens = tokenize(src).unwrap().iter().map(|e| {
+            e.kind.clone()
+        }).collect::<Vec<TokenKind>>();
         assert_eq!(tokens, vec![
             TokenKind::InclementValue,
             TokenKind::InclementValue,
             TokenKind::InclementValue,
             TokenKind::Output,
+            TokenKind::End,
         ]);
     }
 }
