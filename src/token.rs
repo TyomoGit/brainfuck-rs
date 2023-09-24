@@ -88,9 +88,12 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
     let mut jump_stack = Vec::<usize>::new();
 
+    #[cfg(feature="comment")]
     let mut is_comment = false;
+
     for char in src.chars() {
-        if cfg!(feature="comment") {
+        #[cfg(feature="comment")]
+        {
             if char == '#' {
                 is_comment = true;
             }

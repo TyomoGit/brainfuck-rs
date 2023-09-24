@@ -61,6 +61,7 @@ impl Interpreter {
         Ok(())
     }
 
+    #[cfg(feature="pointer_flow")]
     fn inclement_pointer(&mut self) {
         if self.pointer == self.memory.len() - 1 {
             self.pointer = 0;
@@ -69,12 +70,23 @@ impl Interpreter {
         }
     }
 
+    #[cfg(not(feature="pointer_flow"))]
+    fn inclement_pointer(&mut self) {
+        self.pointer += 1;
+    }
+
+    #[cfg(feature="pointer_flow")]
     fn decrement_pointer(&mut self) {
         if self.pointer == 0 {
             self.pointer = self.memory.len() - 1;
         } else {
             self.pointer -= 1;
         }
+    }
+
+    #[cfg(not(feature="pointer_flow"))]
+    fn decrement_pointer(&mut self) {
+        self.pointer -= 1;
     }
 
     fn inclement_value(&mut self) {
