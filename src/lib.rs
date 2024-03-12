@@ -1,18 +1,35 @@
 use std::io::{Read, Write};
 
-pub mod token;
+use parser::Parser;
+use scanner::Scanner;
+
+pub mod converter;
 pub mod interpreter;
+pub mod op;
+pub mod parser;
+pub mod scanner;
+pub mod token;
 
 pub fn run(string: &str, read: &mut impl Read, write: &mut impl Write) {
-    let tokens = token::tokenize(string).unwrap_or_else(|e| {
-        eprintln!("{}", e);
-        std::process::exit(1);
-    });
-    let mut interpreter = interpreter::Interpreter::new(tokens);
-    interpreter.run(read, write).unwrap_or_else(|e| {
-        eprintln!("{}", e);
-        std::process::exit(1);
-    });
+    let mut scanner = Scanner::new(string.chars().collect());
+    let tokens = scanner.scan_tokens();
+
+    let parser = Parser::new(tokens);
+    let parse_result = parser.parse_tokens();
+    let Ok(code) = parse_result else {
+        for error in parse_result.unwrap_err() {
+            eprintln!("{}", error);
+        }
+
+        return;
+    };
+
+    for (i, op) in code.iter().enumerate() {
+        println!("{}: {:?}", i, op);
+    }
+
+    let mut interpreter = interpreter::Interpreter::new(code);
+    interpreter.run(read, write);
 }
 
 #[cfg(test)]
@@ -37,7 +54,9 @@ mod tests {
 
     impl MyReader {
         pub fn empty() -> Self {
-            Self { input: [0; 255].to_vec() }
+            Self {
+                input: [0; 255].to_vec(),
+            }
         }
     }
 
@@ -53,19 +72,9 @@ mod tests {
 
     impl MyWriter {
         pub fn empty() -> Self {
-            Self { output: [0; 255].to_vec() }
+            Self {
+                output: [0; 255].to_vec(),
+            }
         }
-    }
-
-    #[test]
-    fn incomplete_loop() {
-        let program = "[+.";
-        let tokens = token::tokenize(program).unwrap();
-        let mut reader = MyReader::empty();
-        let mut writer = MyWriter::empty();
-        let mut interpreter = interpreter::Interpreter::new(tokens);
-        assert!(
-            interpreter.run(&mut reader, &mut writer).is_err()
-        )
     }
 }
