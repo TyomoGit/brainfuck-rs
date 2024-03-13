@@ -13,7 +13,10 @@ use brainfuck_interpreter::llvm;
 use inkwell::context::Context;
 
 fn main() {
-    let file_name = env::args().nth(1).expect("no file name");
+    let Some(file_name) = env::args().nth(1) else {
+        repl();
+        return;
+    };
     let mut file = File::open(file_name).expect("failed to open file");
     let mut src = String::new();
     file.read_to_string(&mut src).expect("failed to read file");
@@ -47,7 +50,33 @@ fn main() {
     converter.run_jit().unwrap();
 }
 
-pub fn link(object: &Path) -> Result<PathBuf> {
+fn repl() {
+    let mut interpreter = Interpreter::new(vec![], stdin(), stdout());
+    loop {
+        print!("> ");
+        stdout().flush().unwrap();
+        let mut src = String::new();
+        stdin().read_line(&mut src).unwrap();
+        let mut scanner = Scanner::new(src.chars().collect());
+        let tokens = scanner.scan_tokens();
+        let parser = Parser::new(tokens);
+        let parse_result = parser.parse_tokens();
+        let Ok(program) = parse_result else {
+            for error in parse_result.unwrap_err() {
+                eprintln!("{}", error);
+            }
+            continue;
+        };
+        
+        let compiler = vm::compiler::Compiler::new();
+        let code = compiler.compile(program);
+        interpreter.update(code);
+        
+        interpreter.run();
+    }
+}
+
+fn link(object: &Path) -> Result<PathBuf> {
     let mut output = PathBuf::from(object);
     output.set_extension("out");
 

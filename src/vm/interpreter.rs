@@ -25,6 +25,11 @@ impl Interpreter {
         }
     }
 
+    pub fn update(&mut self, code: Vec<Op>) {
+        self.code = code;
+        self.ip = 0;
+    }
+
     pub fn run(&mut self) {
         while self.check_token_pointer() {
             self.step();
