@@ -10,7 +10,7 @@ pub mod parser;
 pub mod scanner;
 pub mod token;
 
-pub fn run(string: &str, read: &mut impl Read, write: &mut impl Write) {
+pub fn run(string: &str, read: impl Read + 'static, write: impl Write + 'static) {
     let mut scanner = Scanner::new(string.chars().collect());
     let tokens = scanner.scan_tokens();
 
@@ -28,8 +28,8 @@ pub fn run(string: &str, read: &mut impl Read, write: &mut impl Write) {
         println!("{}: {:?}", i, op);
     }
 
-    let mut interpreter = interpreter::Interpreter::new(code);
-    interpreter.run(read, write);
+    let mut interpreter = interpreter::Interpreter::new(code, read, write);
+    interpreter.run();
 }
 
 #[cfg(test)]

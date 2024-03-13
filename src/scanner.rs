@@ -1,10 +1,15 @@
 use crate::token::{Token, TokenType};
 
+/// 字句解析器
 #[derive(Debug, Clone, Default)]
 pub struct Scanner {
+    /// ソースコード
     source: Vec<char>,
+    /// 現在の位置
     current: usize,
+    /// 現在の列
     column: usize,
+    /// 現在の行
     line: usize,
 }
 
@@ -18,6 +23,7 @@ impl Scanner {
         }
     }
 
+    /// 全てのトークンをスキャンする
     pub fn scan_tokens(&mut self) -> Vec<Token> {
         let mut result: Vec<Token> = Vec::new();
 
@@ -32,17 +38,18 @@ impl Scanner {
         result
     }
 
+    /// 現在のトークンをスキャンする
     fn scan_token(&mut self) -> Option<Token> {
         let c = self.advance();
         let token_type = match c {
-            '>' => TokenType::InclementPointer,
-            '<' => TokenType::DecrementPointer,
-            '+' => TokenType::InclementValue,
-            '-' => TokenType::DecrementValue,
-            '.' => TokenType::Output,
-            ',' => TokenType::Input,
-            '[' => TokenType::LoopStart,
-            ']' => TokenType::LoopEnd,
+            '>' => TokenType::RightAngle,
+            '<' => TokenType::LeftAngle,
+            '+' => TokenType::Plus,
+            '-' => TokenType::Minus,
+            '.' => TokenType::Dot,
+            ',' => TokenType::Comma,
+            '[' => TokenType::LeftBracket,
+            ']' => TokenType::RightBracket,
             '\n' => {
                 self.line += 1;
                 self.column = 0;
@@ -59,10 +66,6 @@ impl Scanner {
         self.current += 1;
         self.column += 1;
         result
-    }
-
-    fn peek(&self) -> char {
-        *self.source.get(self.current).unwrap_or(&'\0')
     }
 
     fn is_at_end(&self) -> bool {

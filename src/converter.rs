@@ -1,10 +1,12 @@
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Ok, Result};
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
+use inkwell::execution_engine::ExecutionEngine;
 use inkwell::module::Module;
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
 use inkwell::types::{BasicType, PointerType};
@@ -21,7 +23,7 @@ pub struct Converter<'ctx> {
     machine: targets::TargetMachine,
 
     code: Vec<Op>,
-    loop_start_end: Vec<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
+    loop_stack: Vec<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
 }
 
 impl<'ctx> Converter<'ctx> {
@@ -35,7 +37,7 @@ impl<'ctx> Converter<'ctx> {
             builder,
             machine,
             code,
-            loop_start_end: Vec::new(),
+            loop_stack: Vec::new(),
         }
     }
 
@@ -51,6 +53,9 @@ impl<'ctx> Converter<'ctx> {
         let putchar_fn_type = i32_type.fn_type(&[i8_type.into()], false);
         let putchar_fn = self.module.add_function("putchar", putchar_fn_type, None);
 
+        let printf_fn_type = i32_type.fn_type(&[i8_ptr_type.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_fn_type, None);
+
         let array_ = i8_type.const_array(&[i8_type.const_zero(); 30000]);
         // let array = self.builder.build_array_alloca(i8_type, i32_type.const_int(30000, false), "array").unwrap();
         // let zero = i8_type.const_zero();
@@ -64,52 +69,67 @@ impl<'ctx> Converter<'ctx> {
         let entry_block = self.context.append_basic_block(main_fn, "entry_block");
         self.builder.position_at_end(entry_block);
 
+        let string_ptr_msg = self
+            .builder
+            .build_global_string_ptr("[%p]", "message")
+            .unwrap();
+
         let pointer = self.builder.build_alloca(i8_ptr_type, "pointer").unwrap();
-        self.builder.build_store(pointer, array.as_pointer_value()).unwrap();
+
+        self.builder
+            .build_store(pointer, array.as_pointer_value())
+            .unwrap();
 
         for op in self.code.iter() {
             match op {
                 Op::InclementPointer => {
-                    let pointer = self
+                    let pointer_ = self
                         .builder
                         .build_load(i8_ptr_type, pointer, "pointer")
                         .unwrap()
                         .into_pointer_value();
-                    let new_pointer = unsafe {
+
+                    let new_pointer_ = unsafe {
                         self.builder
                             .build_in_bounds_gep(
                                 i8_ptr_type,
-                                pointer,
+                                pointer_,
                                 &[i32_type.const_int(1, false)],
                                 "new_pointer",
                             )
                             .unwrap()
                     };
 
-                    self.builder.build_store(pointer, new_pointer).unwrap();
+                    self.builder.build_store(pointer, new_pointer_).unwrap();
                 }
                 Op::DecrementPointer => {
-                    let pointer = self
+                    let one = i64_type.const_int(1, false);
+                    let diff = self.builder.build_int_neg(one, "diff").unwrap();
+
+                    let pointer_ = self
                         .builder
                         .build_load(i8_ptr_type, pointer, "pointer")
                         .unwrap()
                         .into_pointer_value();
 
-                    let one = i64_type.const_int(1, false);
-                    let diff = self.builder.build_int_neg(one, "diff").unwrap();
-
-                    let new_pointer = unsafe {
+                    let new_pointer_ = unsafe {
                         self.builder
-                            .build_in_bounds_gep(i8_type, pointer, &[diff], "new_pointer")
+                            .build_in_bounds_gep(i8_ptr_type, pointer_, &[diff], "new_pointer")
                             .unwrap()
                     };
 
-                    self.builder.build_store(pointer, new_pointer).unwrap();
+                    self.builder.build_store(pointer, new_pointer_).unwrap();
                 }
                 Op::InclementValue => {
+                    let pointer_ = self
+                        .builder
+                        .build_load(i8_ptr_type, pointer, "pointer")
+                        .unwrap()
+                        .into_pointer_value();
+
                     let value = self
                         .builder
-                        .build_load(i8_type, pointer, "pointer")
+                        .build_load(i8_type, pointer_, "value")
                         .unwrap()
                         .into_int_value();
 
@@ -117,33 +137,35 @@ impl<'ctx> Converter<'ctx> {
                         .builder
                         .build_int_add(value, i8_type.const_int(1, false), "new_value")
                         .unwrap();
-                    self.builder.build_store(pointer, new_value).unwrap();
+                    self.builder.build_store(pointer_, new_value).unwrap();
                 }
                 Op::DecrementValue => {
-                    let pointer = self
+                    let pointer_ = self
                         .builder
                         .build_load(i8_ptr_type, pointer, "pointer")
                         .unwrap()
                         .into_pointer_value();
                     let value = self
                         .builder
-                        .build_load(i8_type, pointer, "value")
+                        .build_load(i8_type, pointer_, "value")
                         .unwrap()
                         .into_int_value();
 
                     let one = i8_type.const_int(1, false);
                     let diff = self.builder.build_int_neg(one, "diff").unwrap();
 
-                    let new_value = self
-                        .builder
-                        .build_int_sub(value, diff, "new_value")
-                        .unwrap();
-                    self.builder.build_store(pointer, new_value).unwrap();
+                    let new_value = self.builder.build_int_sub(value, one, "new_value").unwrap();
+                    self.builder.build_store(pointer_, new_value).unwrap();
                 }
                 Op::Output => {
+                    let pointer_ = self
+                        .builder
+                        .build_load(i8_ptr_type, pointer, "value")
+                        .unwrap()
+                        .into_pointer_value();
                     let value = self
                         .builder
-                        .build_load(i8_type, pointer, "value")
+                        .build_load(i8_type, pointer_, "value")
                         .unwrap()
                         .into_int_value();
                     self.builder
@@ -157,23 +179,38 @@ impl<'ctx> Converter<'ctx> {
                         .unwrap()
                         .as_any_value_enum()
                         .into_int_value();
-                    self.builder.build_store(pointer, value).unwrap();
+                    let pointer_ = self
+                        .builder
+                        .build_load(i8_ptr_type, pointer, "pointer")
+                        .unwrap()
+                        .into_pointer_value();
+                    self.builder.build_store(pointer_, value).unwrap();
                 }
-                Op::LoopStart { if_zero: _ } => {
-                    let block_before_loop = main_fn.get_last_basic_block().unwrap();
+                Op::LoopStart { if_zero } => {
                     let loop_start = self.context.append_basic_block(main_fn, "loop_start");
                     let loop_body = self.context.append_basic_block(main_fn, "loop_body");
-                    let loop_end = self.context.append_basic_block(main_fn, "loop_end");
-                    self.loop_start_end.push((loop_start, loop_end));
+                    self.loop_stack.push((loop_start, loop_body));
 
-                    self.builder.position_at_end(block_before_loop);
+                    // self.builder.position_before(&loop_start.get_first_instruction().unwrap());
                     self.builder.build_unconditional_branch(loop_start).unwrap();
 
+                    self.builder.position_at_end(loop_body);
+                }
+                Op::LoopEnd { if_non_zero: _ } => {
+                    let (loop_start, loop_body) = self.loop_stack.pop().unwrap();
+                    let before_end = main_fn.get_last_basic_block().unwrap();
+                    let loop_end = self.context.append_basic_block(main_fn, "loop_end");
+
                     self.builder.position_at_end(loop_start);
+                    let pointer_ = self
+                        .builder
+                        .build_load(i8_ptr_type, pointer, "pointer")
+                        .unwrap()
+                        .into_pointer_value();
 
                     let value = self
                         .builder
-                        .build_load(i8_type, pointer, "value")
+                        .build_load(i8_type, pointer_, "value")
                         .unwrap()
                         .into_int_value();
 
@@ -191,23 +228,22 @@ impl<'ctx> Converter<'ctx> {
                         .build_conditional_branch(condition, loop_body, loop_end)
                         .unwrap();
 
-                    self.builder.position_at_end(loop_body);
-                }
-                Op::LoopEnd { if_non_zero: _ } => {
-                    let start_and_end = self.loop_start_end.pop().unwrap();
+                    self.builder.position_at_end(before_end);
 
-                    self.builder
-                        .build_unconditional_branch(start_and_end.0)
-                        .unwrap();
+                    self.builder.build_unconditional_branch(loop_start).unwrap();
 
-                    self.builder.position_at_end(start_and_end.1);
+                    self.builder.position_at_end(loop_end);
                 }
             }
         }
 
         self.builder
+            .position_at_end(main_fn.get_last_basic_block().unwrap());
+        self.builder
             .build_return(Some(&i32_type.const_int(0, false)))
             .unwrap();
+
+        // println!("output: {}", self.module.print_to_string().to_str().unwrap());
     }
 
     pub fn write_to_file(&self, file: &Path) -> Result<()> {
@@ -224,6 +260,25 @@ impl<'ctx> Converter<'ctx> {
 
         Ok(())
     }
+
+    pub fn run_jit(&self) -> Result<()> {
+        Target::initialize_native(&targets::InitializationConfig::default())
+            .map_err(|e| anyhow!("failed to initialize native target: {}", e))?;
+
+        let engine = self
+            .module
+            .create_jit_execution_engine(OptimizationLevel::Aggressive)
+            .map_err(|e| anyhow!("failed to create JIT engine: {}", e))?;
+
+        unsafe {
+            engine
+                .get_function::<unsafe extern "C" fn() -> i32>("main")
+                .unwrap()
+                .call();
+        }
+
+        Ok(())
+    }
 }
 
 pub fn host_machine() -> Result<targets::TargetMachine> {
@@ -237,7 +292,7 @@ pub fn host_machine() -> Result<targets::TargetMachine> {
     let cpu = TargetMachine::get_host_cpu_name();
     let features = TargetMachine::get_host_cpu_features();
 
-    let opt_level = OptimizationLevel::None;
+    let opt_level = OptimizationLevel::Aggressive;
     let reloc_mode = RelocMode::Default;
     let code_model = CodeModel::Default;
 

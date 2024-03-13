@@ -1,20 +1,13 @@
-mod converter;
-mod interpreter;
-mod op;
-mod parser;
-mod scanner;
-mod token;
-
 use std::fs::File;
 use std::io::{stdin, stdout, Read, Write};
 use std::path::{Path, PathBuf};
 use std::{env, path};
 
 use anyhow::Result;
-use converter::{host_machine, Converter};
+use brainfuck_interpreter::converter::{host_machine, Converter};
+use brainfuck_interpreter::parser::Parser;
+use brainfuck_interpreter::scanner::Scanner;
 use inkwell::context::Context;
-use parser::Parser;
-use scanner::Scanner;
 
 fn main() {
     let file_name = env::args().nth(1).expect("no file name");
@@ -43,10 +36,11 @@ fn main() {
 
     let mut converter = Converter::new(&context, machine, code);
     converter.convert();
-    converter.write_to_file(Path::new("a.o")).unwrap();
+    // converter.write_to_file(Path::new("a.o")).unwrap();
 
-    let object = link(Path::new("a.o")).unwrap();
-    println!("output: {}", object.display());
+    // let object = link(Path::new("a.o")).unwrap();
+    // println!("output: {}", object.display());
+    converter.run_jit().unwrap();
 }
 
 pub fn link(object: &Path) -> Result<PathBuf> {

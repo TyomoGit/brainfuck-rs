@@ -5,8 +5,10 @@ use crate::{
     token::{Token, TokenType},
 };
 
+/// 構文解析エラー
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
+    /// LeftBracketとRightBracketの対応関係の不備
     IncompleteLoop,
 }
 
@@ -20,8 +22,11 @@ impl Display for ParseError {
     }
 }
 
+/// 構文解析器
 pub struct Parser {
+    /// トークン化済みのソースコード
     tokens: Vec<Token>,
+    /// ジャンプの
     jump_stack: Vec<usize>,
     current: usize,
 
@@ -58,17 +63,17 @@ impl Parser {
         let token = self.advance();
         let token_type = token.token_type();
         let op = match token_type {
-            TokenType::InclementValue => Op::InclementValue,
-            TokenType::DecrementValue => Op::DecrementValue,
-            TokenType::InclementPointer => Op::InclementPointer,
-            TokenType::DecrementPointer => Op::DecrementPointer,
-            TokenType::Input => Op::Input,
-            TokenType::Output => Op::Output,
-            TokenType::LoopStart => {
+            TokenType::Plus => Op::InclementValue,
+            TokenType::Minus => Op::DecrementValue,
+            TokenType::RightAngle => Op::InclementPointer,
+            TokenType::LeftAngle => Op::DecrementPointer,
+            TokenType::Comma => Op::Input,
+            TokenType::Dot => Op::Output,
+            TokenType::LeftBracket => {
                 self.jump_stack.push(self.current);
                 Op::LoopStart { if_zero: 0 }
             }
-            TokenType::LoopEnd => {
+            TokenType::RightBracket => {
                 let loop_start = self.jump_stack.pop().ok_or(ParseError::IncompleteLoop)?;
                 let loop_end = self.current;
                 if let Op::LoopStart { if_zero } = &mut self.result[loop_start - 1] {

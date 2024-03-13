@@ -7,5 +7,5 @@ fn main() {
         ,.,.,.
     ";
 
-    run(program, &mut stdin(), &mut stdout());
+    run(program, stdin(), stdout());
 }
