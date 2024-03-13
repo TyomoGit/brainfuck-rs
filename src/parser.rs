@@ -1,8 +1,7 @@
 use std::{error::Error, fmt::Display};
 
 use crate::{
-    op::Op,
-    token::{Token, TokenType},
+    ast::Instruction, token::{Token, TokenType}
 };
 
 /// 構文解析エラー
@@ -26,11 +25,8 @@ impl Display for ParseError {
 pub struct Parser {
     /// トークン化済みのソースコード
     tokens: Vec<Token>,
-    /// ジャンプの
-    jump_stack: Vec<usize>,
+    /// 現在の位置
     current: usize,
-
-    result: Vec<Op>,
 }
 
 impl Parser {
@@ -38,62 +34,85 @@ impl Parser {
         Self {
             tokens,
             current: 0,
-            jump_stack: Vec::new(),
-            result: Vec::new(),
+            // jump_stack: Vec::new(),
+            // result: Vec::new(),
         }
     }
 
-    pub fn parse_tokens(mut self) -> Result<Vec<Op>, Vec<ParseError>> {
+    pub fn parse_tokens(mut self) -> Result<Vec<Instruction>, Vec<ParseError>> {
         let mut errors = Vec::new();
-        for _ in 0..self.tokens.len() {
-            match self.parse_token() {
-                Ok(op) => self.result.push(op),
+        let mut result: Vec<Instruction> = Vec::new();
+        while !self.is_at_end() {
+            match self.parse_instruction() {
+                Ok(op) => result.push(op),
                 Err(e) => errors.push(e),
             }
         }
 
         if errors.is_empty() {
-            Ok(self.result)
+            Ok(result)
         } else {
             Err(errors)
         }
     }
 
-    fn parse_token(&mut self) -> Result<Op, ParseError> {
+    fn parse_instruction(&mut self) -> Result<Instruction, ParseError> {
         let token = self.advance();
         let token_type = token.token_type();
         let op = match token_type {
-            TokenType::Plus => Op::InclementValue,
-            TokenType::Minus => Op::DecrementValue,
-            TokenType::RightAngle => Op::InclementPointer,
-            TokenType::LeftAngle => Op::DecrementPointer,
-            TokenType::Comma => Op::Input,
-            TokenType::Dot => Op::Output,
+            TokenType::Plus => Instruction::InclementValue,
+            TokenType::Minus => Instruction::DecrementValue,
+            TokenType::RightAngle => Instruction::InclementPointer,
+            TokenType::LeftAngle => Instruction::DecrementPointer,
+            TokenType::Comma => Instruction::Input,
+            TokenType::Dot => Instruction::Output,
             TokenType::LeftBracket => {
-                self.jump_stack.push(self.current);
-                Op::LoopStart { if_zero: 0 }
+                // self.jump_stack.push(self.current);
+                // Op::LoopStart { if_zero: 0 }
+                Instruction::Loop(self.parse_loop())
             }
             TokenType::RightBracket => {
-                let loop_start = self.jump_stack.pop().ok_or(ParseError::IncompleteLoop)?;
-                let loop_end = self.current;
-                if let Op::LoopStart { if_zero } = &mut self.result[loop_start - 1] {
-                    *if_zero = loop_end;
-                } else {
-                    return Err(ParseError::IncompleteLoop);
-                };
+                // let loop_start = self.jump_stack.pop().ok_or(ParseError::IncompleteLoop)?;
+                // let loop_end = self.current;
+                // if let Op::LoopStart { if_zero } = &mut self.result[loop_start - 1] {
+                //     *if_zero = loop_end;
+                // } else {
+                //     return Err(ParseError::IncompleteLoop);
+                // };
 
-                Op::LoopEnd {
-                    if_non_zero: loop_start,
-                }
+                // Op::LoopEnd {
+                //     if_non_zero: loop_start,
+                // }
+                return Err(ParseError::IncompleteLoop);
             }
         };
 
         Ok(op)
     }
 
+    fn parse_loop(&mut self) -> Vec<Instruction>{
+        let mut result: Vec<Instruction> = Vec::new();
+
+        while *self.peek().token_type() != TokenType::RightBracket {
+            result.push(self.parse_instruction().unwrap());
+        }
+
+        self.advance();
+
+        result
+    }
+
     fn advance(&mut self) -> &Token {
         let token = &self.tokens[self.current];
         self.current += 1;
         token
+    }
+
+    fn peek(&self) -> &Token {
+        &self.tokens[self.current]
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.current >= self.tokens.len()
     }
 }

@@ -4,9 +4,12 @@ use std::path::{Path, PathBuf};
 use std::{env, path};
 
 use anyhow::Result;
-use brainfuck_interpreter::converter::{host_machine, Converter};
+use brainfuck_interpreter::llvm::compiler::{host_machine, Compiler};
 use brainfuck_interpreter::parser::Parser;
 use brainfuck_interpreter::scanner::Scanner;
+use brainfuck_interpreter::vm::interpreter::{self, Interpreter};
+use brainfuck_interpreter::vm;
+use brainfuck_interpreter::llvm;
 use inkwell::context::Context;
 
 fn main() {
@@ -20,26 +23,27 @@ fn main() {
 
     let parser = Parser::new(tokens);
     let parse_result = parser.parse_tokens();
-    let Ok(code) = parse_result else {
+    let Ok(program) = parse_result else {
         for error in parse_result.unwrap_err() {
             eprintln!("{}", error);
         }
-
-        return;
+        panic!("failed to parse tokens");
     };
 
-    // let mut interpreter = interpreter::Interpreter::new(code);
-    // interpreter.run(&mut stdin(), &mut stdout());
+    // let compiler = vm::compiler::Compiler::new();
+    // let code = compiler.compile(program);
+    // let mut interpreter = Interpreter::new(code, stdin(), stdout());
+    // interpreter.run();
+
 
     let context = Context::create();
     let machine = host_machine().expect("failed to create machine");
+    let mut converter = llvm::compiler::Compiler::new(&context, machine);
+    converter.compile(program);
+    converter.write_to_file(Path::new("a.o")).unwrap();
 
-    let mut converter = Converter::new(&context, machine, code);
-    converter.convert();
-    // converter.write_to_file(Path::new("a.o")).unwrap();
-
-    // let object = link(Path::new("a.o")).unwrap();
-    // println!("output: {}", object.display());
+    let object = link(Path::new("a.o")).unwrap();
+    println!("output: {}", object.display());
     converter.run_jit().unwrap();
 }
 

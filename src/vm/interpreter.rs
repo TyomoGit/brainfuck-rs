@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 
-use crate::op::Op;
+use crate::vm::op::Op;
 
 pub struct Interpreter {
     memory: Vec<u8>,
@@ -25,8 +25,10 @@ impl Interpreter {
         }
     }
 
-    pub fn check_token_pointer(&self) -> bool {
-        self.ip < self.code.len()
+    pub fn run(&mut self) {
+        while self.check_token_pointer() {
+            self.step();
+        }
     }
 
     pub fn step(&mut self) {
@@ -46,10 +48,8 @@ impl Interpreter {
         }
     }
 
-    pub fn run(&mut self) {
-        while self.check_token_pointer() {
-            self.step();
-        }
+    fn check_token_pointer(&self) -> bool {
+        self.ip < self.code.len()
     }
 
     fn advance(&mut self) -> &Op {
