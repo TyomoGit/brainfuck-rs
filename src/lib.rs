@@ -4,12 +4,12 @@ use parser::Parser;
 use scanner::Scanner;
 use vm::interpreter::Interpreter;
 
+pub mod ast;
 pub mod llvm;
-pub mod vm;
 pub mod parser;
 pub mod scanner;
 pub mod token;
-pub mod ast;
+pub mod vm;
 
 pub fn run(string: &str, read: impl Read + 'static, write: impl Write + 'static) {
     let mut scanner = Scanner::new(string.chars().collect());
@@ -31,7 +31,6 @@ pub fn run(string: &str, read: impl Read + 'static, write: impl Write + 'static)
 
     let compiler = vm::compiler::Compiler::new();
     let code = compiler.compile(program);
-    
 
     let mut interpreter = Interpreter::new(code, read, write);
     interpreter.run();

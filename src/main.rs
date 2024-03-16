@@ -1,15 +1,15 @@
+use std::env;
 use std::fs::File;
 use std::io::{stdin, stdout, Read, Write};
 use std::path::{Path, PathBuf};
-use std::{env, path};
 
 use anyhow::Result;
-use brainfuck_interpreter::llvm::compiler::{host_machine, Compiler};
-use brainfuck_interpreter::parser::Parser;
-use brainfuck_interpreter::scanner::Scanner;
-use brainfuck_interpreter::vm::interpreter::{self, Interpreter};
-use brainfuck_interpreter::vm;
-use brainfuck_interpreter::llvm;
+use brainfuck_rs::llvm;
+use brainfuck_rs::llvm::compiler::host_machine;
+use brainfuck_rs::parser::Parser;
+use brainfuck_rs::scanner::Scanner;
+use brainfuck_rs::vm;
+use brainfuck_rs::vm::interpreter::Interpreter;
 use inkwell::context::Context;
 
 fn main() {
@@ -37,7 +37,6 @@ fn main() {
     // let code = compiler.compile(program);
     // let mut interpreter = Interpreter::new(code, stdin(), stdout());
     // interpreter.run();
-
 
     let context = Context::create();
     let machine = host_machine().expect("failed to create machine");
@@ -67,11 +66,11 @@ fn repl() {
             }
             continue;
         };
-        
+
         let compiler = vm::compiler::Compiler::new();
         let code = compiler.compile(program);
         interpreter.update(code);
-        
+
         interpreter.run();
     }
 }

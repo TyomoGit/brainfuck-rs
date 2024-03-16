@@ -3,17 +3,12 @@ use crate::ast::Instruction;
 use super::op::Op;
 
 pub struct Compiler {
-    current: usize,
-
     result: Vec<Op>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
-        Self {
-            current: 0,
-            result: Vec::new(),
-        }
+        Self { result: Vec::new() }
     }
 
     pub fn compile(mut self, program: Vec<Instruction>) -> Vec<Op> {
@@ -47,8 +42,10 @@ impl Compiler {
                     unreachable!("Invalid LoopStart instruction");
                 }
 
-                self.emit(Op::LoopEnd { if_non_zero: loop_start + 1 });
-            },
+                self.emit(Op::LoopEnd {
+                    if_non_zero: loop_start + 1,
+                });
+            }
         };
     }
 

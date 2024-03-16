@@ -1,7 +1,8 @@
 use std::{error::Error, fmt::Display};
 
 use crate::{
-    ast::Instruction, token::{Token, TokenType}
+    ast::Instruction,
+    token::{Token, TokenType},
 };
 
 /// 構文解析エラー
@@ -90,7 +91,7 @@ impl Parser {
         Ok(op)
     }
 
-    fn parse_loop(&mut self) -> Vec<Instruction>{
+    fn parse_loop(&mut self) -> Vec<Instruction> {
         let mut result: Vec<Instruction> = Vec::new();
 
         while *self.peek().token_type() != TokenType::RightBracket {

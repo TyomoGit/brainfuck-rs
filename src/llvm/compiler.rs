@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 
@@ -9,7 +8,7 @@ use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::targets::{CodeModel, RelocMode, Target, TargetMachine};
 use inkwell::types::{FunctionType, IntType, PointerType};
-use inkwell::values::{AnyValue, FunctionValue, GlobalValue, PointerValue};
+use inkwell::values::{AnyValue, FunctionValue, GlobalValue, IntValue, PointerValue};
 use inkwell::{targets, AddressSpace, IntPredicate, OptimizationLevel};
 
 use crate::ast::Instruction;
@@ -39,6 +38,7 @@ struct Types<'ctx> {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Values<'ctx> {
     getchar_fn: FunctionValue<'ctx>,
     putchar_fn: FunctionValue<'ctx>,
@@ -46,8 +46,8 @@ struct Values<'ctx> {
     main_fn: FunctionValue<'ctx>,
 
     array: GlobalValue<'ctx>,
-    string_ptr_msg: GlobalValue<'ctx>,
-    pointer: PointerValue<'ctx>,
+    msg_ptr: GlobalValue<'ctx>,
+    pointer_ptr: PointerValue<'ctx>,
 }
 
 impl<'ctx> Compiler<'ctx> {
@@ -60,8 +60,13 @@ impl<'ctx> Compiler<'ctx> {
             i8_type: context.i8_type(),
             i32_type: context.i32_type(),
             getchar_fn_type: context.i8_type().fn_type(&[], false),
-            putchar_fn_type: context.i32_type().fn_type(&[context.i8_type().into()], false),
-            printf_fn_type: context.i32_type().fn_type(&[context.i8_type().ptr_type(AddressSpace::default()).into()], true),
+            putchar_fn_type: context
+                .i32_type()
+                .fn_type(&[context.i8_type().into()], false),
+            printf_fn_type: context.i32_type().fn_type(
+                &[context.i8_type().ptr_type(AddressSpace::default()).into()],
+                true,
+            ),
             main_fn_type: context.i32_type().fn_type(&[], false),
         };
 
@@ -69,19 +74,21 @@ impl<'ctx> Compiler<'ctx> {
         let entry_block = context.append_basic_block(main_fn, "entry_block");
         builder.position_at_end(entry_block);
 
-        let array_ = types.i8_type.const_array(&[types.i8_type.const_zero(); 30000]);
+        let array_ = types
+            .i8_type
+            .const_array(&[types.i8_type.const_zero(); 30000]);
         let array = module.add_global(array_.get_type(), None, "array");
         array.set_initializer(&array_);
 
-        let string_ptr_msg = builder
-            .build_global_string_ptr("[%p]", "message")
+        let msg_ptr = builder.build_global_string_ptr("[%p]", "message").unwrap();
+
+        let pointer_ptr = builder
+            .build_alloca(types.i8_ptr_type, "pointer_ptr")
             .unwrap();
 
-            let pointer = builder.build_alloca(types.i8_ptr_type, "pointer").unwrap();
-
-            builder
-                .build_store(pointer, array.as_pointer_value())
-                .unwrap();
+        builder
+            .build_store(pointer_ptr, array.as_pointer_value())
+            .unwrap();
 
         let values = Values {
             getchar_fn: module.add_function("getchar", types.getchar_fn_type, None),
@@ -89,8 +96,8 @@ impl<'ctx> Compiler<'ctx> {
             printf_fn: module.add_function("printf", types.printf_fn_type, None),
             main_fn,
             array,
-            string_ptr_msg,
-            pointer,
+            msg_ptr,
+            pointer_ptr,
         };
 
         Self {
@@ -100,7 +107,7 @@ impl<'ctx> Compiler<'ctx> {
             machine,
             loop_stack: Vec::new(),
             types,
-            values
+            values,
         }
     }
 
@@ -119,91 +126,78 @@ impl<'ctx> Compiler<'ctx> {
     fn compile_instruction(&mut self, instruction: Instruction) {
         match instruction {
             Instruction::InclementPointer => {
-                let pointer_ = self
-                    .builder
-                    .build_load(self.types.i8_ptr_type, self.values.pointer, "pointer")
-                    .unwrap()
-                    .into_pointer_value();
+                let pointer = self.load_ptr_ptr(self.values.pointer_ptr);
 
-                let new_pointer_ = unsafe {
+                let new_pointer = unsafe {
                     self.builder
                         .build_in_bounds_gep(
                             self.types.i8_ptr_type,
-                            pointer_,
+                            pointer,
                             &[self.types.i32_type.const_int(1, false)],
-                            "new_pointer",
+                            "incremented_pointer",
                         )
                         .unwrap()
                 };
 
-                self.builder.build_store(self.values.pointer, new_pointer_).unwrap();
+                self.builder
+                    .build_store(self.values.pointer_ptr, new_pointer)
+                    .unwrap();
             }
             Instruction::DecrementPointer => {
                 let one = self.types.i32_type.const_int(1, false);
-                let diff = self.builder.build_int_neg(one, "diff").unwrap();
+                let diff = self.builder.build_int_neg(one, "minus_one").unwrap();
 
-                let pointer_ = self
-                    .builder
-                    .build_load(self.types.i8_ptr_type, self.values.pointer, "pointer")
-                    .unwrap()
-                    .into_pointer_value();
+                let pointer = self.load_ptr_ptr(self.values.pointer_ptr);
 
-                let new_pointer_ = unsafe {
+                let new_pointer = unsafe {
                     self.builder
-                        .build_in_bounds_gep(self.types.i8_ptr_type, pointer_, &[diff], "new_pointer")
+                        .build_in_bounds_gep(
+                            self.types.i8_ptr_type,
+                            pointer,
+                            &[diff],
+                            "decremented_pointer",
+                        )
                         .unwrap()
                 };
 
-                self.builder.build_store(self.values.pointer, new_pointer_).unwrap();
+                self.builder
+                    .build_store(self.values.pointer_ptr, new_pointer)
+                    .unwrap();
             }
             Instruction::InclementValue => {
-                let pointer_ = self
-                    .builder
-                    .build_load(self.types.i8_ptr_type, self.values.pointer, "pointer")
-                    .unwrap()
-                    .into_pointer_value();
+                let pointer = self.load_ptr_ptr(self.values.pointer_ptr);
 
-                let value = self
-                    .builder
-                    .build_load(self.types.i8_type, pointer_, "value")
-                    .unwrap()
-                    .into_int_value();
+                let value = self.load_value(pointer);
 
                 let new_value = self
                     .builder
-                    .build_int_add(value, self.types.i8_type.const_int(1, false), "new_value")
+                    .build_int_add(
+                        value,
+                        self.types.i8_type.const_int(1, false),
+                        "incremented_value",
+                    )
                     .unwrap();
-                self.builder.build_store(pointer_, new_value).unwrap();
+                self.builder.build_store(pointer, new_value).unwrap();
             }
             Instruction::DecrementValue => {
-                let pointer_ = self
-                    .builder
-                    .build_load(self.types.i8_ptr_type, self.values.pointer, "pointer")
-                    .unwrap()
-                    .into_pointer_value();
-                let value = self
-                    .builder
-                    .build_load(self.types.i8_type, pointer_, "value")
-                    .unwrap()
-                    .into_int_value();
+                let pointer = self.load_ptr_ptr(self.values.pointer_ptr);
 
-                let one = self.types.i8_type.const_int(1, false);
-                let diff = self.builder.build_int_neg(one, "diff").unwrap();
+                let value = self.load_value(pointer);
 
-                let new_value = self.builder.build_int_sub(value, one, "new_value").unwrap();
-                self.builder.build_store(pointer_, new_value).unwrap();
+                let new_value = self
+                    .builder
+                    .build_int_sub(
+                        value,
+                        self.types.i8_type.const_int(1, false),
+                        "decremented_value",
+                    )
+                    .unwrap();
+                self.builder.build_store(pointer, new_value).unwrap();
             }
             Instruction::Output => {
-                let pointer_ = self
-                    .builder
-                    .build_load(self.types.i8_ptr_type, self.values.pointer, "value")
-                    .unwrap()
-                    .into_pointer_value();
-                let value = self
-                    .builder
-                    .build_load(self.types.i8_type, pointer_, "value")
-                    .unwrap()
-                    .into_int_value();
+                let pointer = self.load_ptr_ptr(self.values.pointer_ptr);
+
+                let value = self.load_value(pointer);
                 self.builder
                     .build_call(self.values.putchar_fn, &[value.into()], "call_putchar")
                     .unwrap();
@@ -215,45 +209,40 @@ impl<'ctx> Compiler<'ctx> {
                     .unwrap()
                     .as_any_value_enum()
                     .into_int_value();
-                let pointer_ = self
-                    .builder
-                    .build_load(self.types.i8_ptr_type, self.values.pointer, "pointer")
-                    .unwrap()
-                    .into_pointer_value();
-                self.builder.build_store(pointer_, value).unwrap();
+                let pointer = self.load_ptr_ptr(self.values.pointer_ptr);
+                self.builder.build_store(pointer, value).unwrap();
             }
             Instruction::Loop(instructions) => {
-                let loop_start = self.context.append_basic_block(self.values.main_fn, "loop_start");
-                let loop_body = self.context.append_basic_block(self.values.main_fn, "loop_body");
+                let loop_start = self
+                    .context
+                    .append_basic_block(self.values.main_fn, "loop_start");
+                let loop_body = self
+                    .context
+                    .append_basic_block(self.values.main_fn, "loop_body");
                 self.loop_stack.push((loop_start, loop_body));
 
-                // self.builder.position_before(&loop_start.get_first_instruction().unwrap());
                 self.builder.build_unconditional_branch(loop_start).unwrap();
 
                 self.builder.position_at_end(loop_body);
-
 
                 for instruction in instructions {
                     self.compile_instruction(instruction);
                 }
 
-
                 let (loop_start, loop_body) = self.loop_stack.pop().unwrap();
                 let before_end = self.values.main_fn.get_last_basic_block().unwrap();
-                let loop_end = self.context.append_basic_block(self.values.main_fn, "loop_end");
+                let loop_end = self
+                    .context
+                    .append_basic_block(self.values.main_fn, "loop_end");
 
                 self.builder.position_at_end(loop_start);
-                let pointer_ = self
+                let pointer = self
                     .builder
-                    .build_load(self.types.i8_ptr_type, self.values.pointer, "pointer")
+                    .build_load(self.types.i8_ptr_type, self.values.pointer_ptr, "pointer")
                     .unwrap()
                     .into_pointer_value();
 
-                let value = self
-                    .builder
-                    .build_load(self.types.i8_type, pointer_, "value")
-                    .unwrap()
-                    .into_int_value();
+                let value = self.load_value(pointer);
 
                 let condition = self
                     .builder
@@ -278,6 +267,21 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
+    /// i8 ptr ptr -> i8 ptr
+    fn load_ptr_ptr(&self, ptr_ptr: PointerValue<'ctx>) -> PointerValue<'ctx> {
+        self.builder
+            .build_load(self.types.i8_ptr_type, ptr_ptr, "pointer")
+            .unwrap()
+            .into_pointer_value()
+    }
+
+    fn load_value(&self, ptr: PointerValue<'ctx>) -> IntValue<'ctx> {
+        self.builder
+            .build_load(self.types.i8_type, ptr, "value")
+            .unwrap()
+            .into_int_value()
+    }
+
     pub fn write_to_file(&self, file: &Path) -> Result<()> {
         self.module
             .verify()
@@ -287,7 +291,6 @@ impl<'ctx> Compiler<'ctx> {
             .map_err(|e| anyhow!("failed to write object file: {}", e))?;
 
         let mut ir = std::fs::File::create("a.ll").unwrap();
-
         ir.write_all(self.module.to_string().as_bytes())?;
 
         Ok(())
@@ -313,6 +316,7 @@ impl<'ctx> Compiler<'ctx> {
     }
 }
 
+// https://github.com/TheDan64/inkwell/issues/184
 pub fn host_machine() -> Result<targets::TargetMachine> {
     Target::initialize_native(&targets::InitializationConfig::default())
         .map_err(|e| anyhow!("failed to initialize native target: {}", e))?;
