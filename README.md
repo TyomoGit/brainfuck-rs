@@ -1,5 +1,5 @@
-# brainfuck-interpreter-rs
+# brainfuck-rs
 
 ## Description
 
-BrainFuckっぽい言語のインタープリタとコンパイラ
+BrainFuckのインタープリタとLLVMへのコンパイラ
