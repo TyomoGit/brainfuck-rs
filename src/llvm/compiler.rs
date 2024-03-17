@@ -4,7 +4,7 @@ use anyhow::{anyhow, Ok, Result};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::targets::{CodeModel, RelocMode, Target, TargetMachine};
+use inkwell::targets::Target;
 use inkwell::types::{FunctionType, IntType, PointerType};
 use inkwell::values::{AnyValue, FunctionValue, GlobalValue, IntValue, PointerValue};
 use inkwell::{targets, AddressSpace, IntPredicate, OptimizationLevel};
