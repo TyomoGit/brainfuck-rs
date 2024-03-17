@@ -3,14 +3,15 @@ use std::fs::File;
 use std::io::{stdin, stdout, Read, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use brainfuck_rs::llvm;
-use brainfuck_rs::llvm::compiler::host_machine;
 use brainfuck_rs::parser::Parser;
 use brainfuck_rs::scanner::Scanner;
 use brainfuck_rs::vm;
 use brainfuck_rs::vm::interpreter::Interpreter;
 use inkwell::context::Context;
+use inkwell::targets::{self, CodeModel, RelocMode, Target, TargetMachine};
+use inkwell::OptimizationLevel;
 
 fn main() {
     let Some(file_name) = env::args().nth(1) else {
@@ -40,13 +41,13 @@ fn main() {
 
     let context = Context::create();
     let machine = host_machine().expect("failed to create machine");
-    let mut converter = llvm::compiler::Compiler::new(&context, machine);
-    converter.compile(program);
-    converter.write_to_file(Path::new("a.o")).unwrap();
+    let mut compiler = llvm::compiler::Compiler::new(&context, machine);
+    compiler.compile(program);
+    compiler.write_to_file(Path::new("a.o")).unwrap();
 
     let object = link(Path::new("a.o")).unwrap();
     println!("output: {}", object.display());
-    converter.run_jit().unwrap();
+    compiler.run_jit().unwrap();
 }
 
 fn repl() {
@@ -75,17 +76,51 @@ fn repl() {
     }
 }
 
-fn link(object: &Path) -> Result<PathBuf> {
+// https://github.com/TheDan64/inkwell/issues/184
+// https://qiita.com/_53a/items/d7d4e4fc250bfd945d9e
+fn host_machine() -> Result<targets::TargetMachine> {
+    Target::initialize_native(&targets::InitializationConfig::default())
+        .map_err(|e| anyhow!("failed to initialize native target: {}", e))?;
+
+    let triple = TargetMachine::get_default_triple();
+    let target =
+        Target::from_triple(&triple).map_err(|e| anyhow!("failed to create target: {}", e))?;
+
+    let cpu = TargetMachine::get_host_cpu_name();
+    let features = TargetMachine::get_host_cpu_features();
+
+    let opt_level = OptimizationLevel::Aggressive;
+    let reloc_mode = RelocMode::Default;
+    let code_model = CodeModel::Default;
+
+    target
+        .create_target_machine(
+            &triple,
+            cpu.to_str()?,
+            features.to_str()?,
+            opt_level,
+            reloc_mode,
+            code_model,
+        )
+        .ok_or(anyhow!("failed to create target machine"))
+}
+
+// https://qiita.com/_53a/items/d7d4e4fc250bfd945d9e
+fn link(object: &Path) -> anyhow::Result<PathBuf> {
     let mut output = PathBuf::from(object);
     output.set_extension("out");
 
-    let _compile_process = std::process::Command::new("gcc")
+    let process = std::process::Command::new("gcc")
         .args(vec![
             object.to_str().unwrap(),
             "-o",
             output.to_str().unwrap(),
         ])
         .output()?;
+
+    if !process.status.success() {
+        anyhow::bail!("{}", String::from_utf8_lossy(&process.stderr));
+    }
 
     Ok(output)
 }

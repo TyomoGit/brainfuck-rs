@@ -1,8 +1,6 @@
-use std::io::Write;
 use std::path::Path;
 
 use anyhow::{anyhow, Ok, Result};
-use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
@@ -19,8 +17,6 @@ pub struct Compiler<'ctx> {
     module: Module<'ctx>,
     builder: Builder<'ctx>,
     machine: targets::TargetMachine,
-
-    loop_stack: Vec<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
 
     types: Types<'ctx>,
     values: Values<'ctx>,
@@ -74,11 +70,11 @@ impl<'ctx> Compiler<'ctx> {
         let entry_block = context.append_basic_block(main_fn, "entry_block");
         builder.position_at_end(entry_block);
 
-        let array_ = types
+        let array_value = types
             .i8_type
             .const_array(&[types.i8_type.const_zero(); 30000]);
-        let array = module.add_global(array_.get_type(), None, "array");
-        array.set_initializer(&array_);
+        let array = module.add_global(array_value.get_type(), None, "array");
+        array.set_initializer(&array_value);
 
         let msg_ptr = builder.build_global_string_ptr("[%p]", "message").unwrap();
 
@@ -105,15 +101,14 @@ impl<'ctx> Compiler<'ctx> {
             module,
             builder,
             machine,
-            loop_stack: Vec::new(),
             types,
             values,
         }
     }
 
     pub fn compile(&mut self, code: Vec<Instruction>) {
-        for op in code {
-            self.compile_instruction(op);
+        for instruction in code {
+            self.compile_instruction(instruction);
         }
 
         self.builder
@@ -219,7 +214,6 @@ impl<'ctx> Compiler<'ctx> {
                 let loop_body = self
                     .context
                     .append_basic_block(self.values.main_fn, "loop_body");
-                self.loop_stack.push((loop_start, loop_body));
 
                 self.builder.build_unconditional_branch(loop_start).unwrap();
 
@@ -229,7 +223,6 @@ impl<'ctx> Compiler<'ctx> {
                     self.compile_instruction(instruction);
                 }
 
-                let (loop_start, loop_body) = self.loop_stack.pop().unwrap();
                 let before_end = self.values.main_fn.get_last_basic_block().unwrap();
                 let loop_end = self
                     .context
@@ -290,8 +283,8 @@ impl<'ctx> Compiler<'ctx> {
             .write_to_file(&self.module, targets::FileType::Object, file)
             .map_err(|e| anyhow!("failed to write object file: {}", e))?;
 
-        let mut ir = std::fs::File::create("a.ll").unwrap();
-        ir.write_all(self.module.to_string().as_bytes())?;
+        // let mut ir = std::fs::File::create("a.ll").unwrap();
+        // ir.write_all(self.module.to_string().as_bytes())?;
 
         Ok(())
     }
@@ -314,32 +307,4 @@ impl<'ctx> Compiler<'ctx> {
 
         Ok(())
     }
-}
-
-// https://github.com/TheDan64/inkwell/issues/184
-pub fn host_machine() -> Result<targets::TargetMachine> {
-    Target::initialize_native(&targets::InitializationConfig::default())
-        .map_err(|e| anyhow!("failed to initialize native target: {}", e))?;
-
-    let triple = TargetMachine::get_default_triple();
-    let target =
-        Target::from_triple(&triple).map_err(|e| anyhow!("failed to create target: {}", e))?;
-
-    let cpu = TargetMachine::get_host_cpu_name();
-    let features = TargetMachine::get_host_cpu_features();
-
-    let opt_level = OptimizationLevel::Aggressive;
-    let reloc_mode = RelocMode::Default;
-    let code_model = CodeModel::Default;
-
-    target
-        .create_target_machine(
-            &triple,
-            cpu.to_str()?,
-            features.to_str()?,
-            opt_level,
-            reloc_mode,
-            code_model,
-        )
-        .ok_or(anyhow!("failed to create target machine"))
 }
