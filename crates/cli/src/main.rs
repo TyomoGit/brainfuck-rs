@@ -4,14 +4,12 @@ use std::io::{stdin, stdout, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
-use brainfuck_rs::llvm;
-use brainfuck_rs::parser::Parser;
-use brainfuck_rs::scanner::Scanner;
-use brainfuck_rs::vm;
-use brainfuck_rs::vm::interpreter::Interpreter;
+use ast::inst::OpCode;
 use inkwell::context::Context;
 use inkwell::targets::{self, CodeModel, RelocMode, Target, TargetMachine};
 use inkwell::OptimizationLevel;
+use parser::parser::Parser;
+use parser::scanner::Scanner;
 
 fn main() {
     let Some(file_name) = env::args().nth(1) else {
@@ -41,7 +39,8 @@ fn main() {
 
     let context = Context::create();
     let machine = host_machine().expect("failed to create machine");
-    let mut compiler = llvm::compiler::Compiler::new(&context, machine);
+
+    let mut compiler = llvm_backend::compiler::Compiler::new(&context, machine);
     compiler.compile(program);
     compiler.write_to_file(Path::new("a.o")).unwrap();
 
@@ -51,7 +50,8 @@ fn main() {
 }
 
 fn repl() {
-    let mut interpreter = Interpreter::new(vec![], stdin(), stdout());
+    let mut interpreter =
+        bytecode_backend::interpreter::Interpreter::new(OpCode::default(), stdin(), stdout());
     loop {
         print!("> ");
         stdout().flush().unwrap();
@@ -68,8 +68,7 @@ fn repl() {
             continue;
         };
 
-        let compiler = vm::compiler::Compiler::new();
-        let code = compiler.compile(program);
+        let code: OpCode = program.into();
         interpreter.update(code);
 
         interpreter.run();

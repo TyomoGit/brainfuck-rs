@@ -1,0 +1,8 @@
+[package]
+name = "analyze"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ast = { version = "0.1.0", path = "../ast" }
+parser = { version = "0.1.0", path = "../parser" }

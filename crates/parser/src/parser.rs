@@ -1,9 +1,8 @@
 use std::{error::Error, fmt::Display};
 
-use crate::{
-    ast::Instruction,
-    token::{Token, TokenType},
-};
+use crate::token::{Token, TokenType};
+
+use ast::inst::{Ast, AstCode};
 
 /// 構文解析エラー
 #[derive(Debug, PartialEq, Eq)]
@@ -40,9 +39,9 @@ impl Parser {
         }
     }
 
-    pub fn parse_tokens(mut self) -> Result<Vec<Instruction>, Vec<ParseError>> {
+    pub fn parse_tokens(mut self) -> Result<AstCode, Vec<ParseError>> {
         let mut errors = Vec::new();
-        let mut result: Vec<Instruction> = Vec::new();
+        let mut result: Vec<Ast> = Vec::new();
         while !self.is_at_end() {
             match self.parse_instruction() {
                 Ok(op) => result.push(op),
@@ -51,26 +50,26 @@ impl Parser {
         }
 
         if errors.is_empty() {
-            Ok(result)
+            Ok(AstCode::new(result))
         } else {
             Err(errors)
         }
     }
 
-    fn parse_instruction(&mut self) -> Result<Instruction, ParseError> {
+    fn parse_instruction(&mut self) -> Result<Ast, ParseError> {
         let token = self.advance();
         let token_type = token.token_type();
         let op = match token_type {
-            TokenType::Plus => Instruction::InclementValue,
-            TokenType::Minus => Instruction::DecrementValue,
-            TokenType::RightAngle => Instruction::InclementPointer,
-            TokenType::LeftAngle => Instruction::DecrementPointer,
-            TokenType::Comma => Instruction::Input,
-            TokenType::Dot => Instruction::Output,
+            TokenType::Plus => Ast::InclementValue(1),
+            TokenType::Minus => Ast::DecrementValue(1),
+            TokenType::RightAngle => Ast::InclementPointer(1),
+            TokenType::LeftAngle => Ast::DecrementPointer(1),
+            TokenType::Comma => Ast::Input,
+            TokenType::Dot => Ast::Output,
             TokenType::LeftBracket => {
                 // self.jump_stack.push(self.current);
                 // Op::LoopStart { if_zero: 0 }
-                Instruction::Loop(self.parse_loop())
+                Ast::Loop(self.parse_loop())
             }
             TokenType::RightBracket => {
                 // let loop_start = self.jump_stack.pop().ok_or(ParseError::IncompleteLoop)?;
@@ -91,8 +90,8 @@ impl Parser {
         Ok(op)
     }
 
-    fn parse_loop(&mut self) -> Vec<Instruction> {
-        let mut result: Vec<Instruction> = Vec::new();
+    fn parse_loop(&mut self) -> AstCode {
+        let mut result: Vec<Ast> = Vec::new();
 
         while *self.peek().token_type() != TokenType::RightBracket {
             result.push(self.parse_instruction().unwrap());
@@ -100,7 +99,7 @@ impl Parser {
 
         self.advance();
 
-        result
+        AstCode::new(result)
     }
 
     fn advance(&mut self) -> &Token {

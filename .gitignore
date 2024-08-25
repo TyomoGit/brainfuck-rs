@@ -1,0 +1,6 @@
+/target
+*.ll
+*.o
+*.out
+*.txt
+*.c

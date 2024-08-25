@@ -1,0 +1,12 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+inkwell = { version = "0.5.0", features = ["llvm18-0"] }
+parser = { path = "../parser" }
+llvm-backend = { path = "../llvm-backend" }
+bytecode-backend = { path = "../bytecode-backend" }
+ast = { version = "0.1.0", path = "../ast" }

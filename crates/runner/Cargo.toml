@@ -1,0 +1,9 @@
+[package]
+name = "runner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ast = { version = "0.1.0", path = "../ast" }
+bytecode-backend = { version = "0.1.0", path = "../bytecode-backend" }
+parser = { version = "0.1.0", path = "../parser" }
